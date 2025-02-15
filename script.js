@@ -306,13 +306,9 @@ async function start(properties, bot, chatId, username) {
     helloMessages[username] || `Привет, ${msg.from.first_name}`
   );
   if (username === "vingriel") {
-    return bot.sendMessage(
-      chatId,
-      "Какой кешбек показать?",
-      buttonDeliveryAdmin
-    );
+    return bot.sendMessage(chatId, "Выбери доставку", buttonDeliveryAdmin);
   }
-  return bot.sendMessage(chatId, `Какой кешбек показать?`, buttonDelivery);
+  return bot.sendMessage(chatId, `Выбери доставку`, buttonDelivery);
 }
 
 function showVilkiMenu(properties, bot, chatId) {
@@ -324,7 +320,7 @@ function showLazyMenu(properties, bot, chatId) {
 }
 
 function returnMenu(properties, bot, chatId) {
-  return bot.sendMessage(chatId, "Какой кешбек показать?", buttonDelivery);
+  return bot.sendMessage(chatId, "Выбери доставку", buttonDelivery);
 }
 
 async function showUsersCashback(properties, bot, chatId, username) {
