@@ -3,7 +3,6 @@ const TelegramApi = require("node-telegram-bot-api");
 const token = "7005376389:AAFvbU95NWUppbBVSKVTi_222vBVrhhKEH0";
 
 const bot = new TelegramApi(token, { polling: true });
-
 const fs = require("fs").promises;
 
 const DB_FILE = "index.json";
@@ -29,6 +28,7 @@ const setDataBase = async (newData) => {
 
 // в зависимости от введенной команды вызывает нужную функцию с нужными параметрами
 const mapping = {
+  "/start": { handler: start },
   "/calculatevilkicashback": {
     properties: { name: "vilki", cashbackPercent: 0.15, calculate: true },
     handler: askForSum,
@@ -59,6 +59,12 @@ const mapping = {
   buttonLazy: {
     handler: showLazyMenu,
   },
+  buttonReturn: {
+    handler: returnMenu,
+  },
+  buttonUsersCashback: {
+    handler: showUsersCashback,
+  },
 };
 
 bot.setMyCommands([
@@ -87,11 +93,21 @@ bot.setMyCommands([
 ]);
 
 // кнопки
-const buttonDelievery = {
+const buttonDelivery = {
   reply_markup: JSON.stringify({
     inline_keyboard: [
       [{ text: "Вилки палки", callback_data: "buttonVilki" }],
-      [{ text: "LazyCrazy", callback_data: "buttonLazy" }],
+      [{ text: "Lazy Crazy", callback_data: "buttonLazy" }],
+    ],
+  }),
+};
+
+const buttonDeliveryAdmin = {
+  reply_markup: JSON.stringify({
+    inline_keyboard: [
+      [{ text: "Вилки палки", callback_data: "buttonVilki" }],
+      [{ text: "Lazy Crazy", callback_data: "buttonLazy" }],
+      [{ text: "Посмотреть балансы", callback_data: "buttonUsersCashback" }],
     ],
   }),
 };
@@ -102,6 +118,7 @@ const vilkiAction = {
       [{ text: "Показать кешбек", callback_data: "/showvilkicashback" }],
       [{ text: "Посчитать кешбек ", callback_data: "/calculatevilkicashback" }],
       [{ text: "Потратить кешбек ", callback_data: "/substractvilkicashback" }],
+      [{ text: "Вернуться к выбору доставки", callback_data: "buttonReturn" }],
     ],
   }),
 };
@@ -112,69 +129,122 @@ const lazyAction = {
       [{ text: "Показать кешбек", callback_data: "/showlazycashback" }],
       [{ text: "Посчитать кешбек ", callback_data: "/calculatelazycashback" }],
       [{ text: "Потратить кешбек ", callback_data: "/substractlazycashback" }],
+      [{ text: "Вернуться к выбору доставки", callback_data: "buttonReturn" }],
     ],
   }),
 };
 
-//функция для получения и подсчета кешбека, delievery определяется как динамическая переменная,
-// получаемая из введенной пользователем команды
-function hadleSum(properties, bot) {
-  // const chatId = msg.chat.id;
-  // const username = msg.from.username;
+// прослушивание кнопок
+bot.on("callback_query", (msg) => {
+  // msg.data - вытаскиваем название кнопки
+  const data = msg.data;
+  const username = msg.from.username;
+  const chatId = msg.message.chat.id;
 
-  bot.once("message", async (msg) => {
-    let sum = parseFloat(+msg.text);
+  const delivery = mapping[data];
 
-    const chatId = msg.chat.id;
-    const username = msg.from.username;
+  delivery.handler(delivery.properties, bot, chatId, username);
+});
 
-    // если сообщение пользователя - не цифра, выдаст сообщение об ошибке и снова запросит сумму
-    // заказа
-    if (isNaN(sum) || sum <= 0 || false) {
-      bot.sendMessage(chatId, "Некорректная сумма. Введи число.");
-      return hadleSum(properties, bot);
-    }
+bot.on("polling_error", (error) =>
+  console.log(`Polling error: ${error.message}`)
+);
 
-    try {
-      const dataBase = await getDataBase();
+// function hadleSum(properties, bot) {
+//   bot.once("message", async (msg) => {
+//     let sum = parseFloat(+msg.text);
 
-      if (properties.calculate) {
-        const cashback = Math.round(sum * properties.cashbackPercent);
-        dataBase[properties.name][username] += cashback;
-      } else {
-        if (sum > dataBase[properties.name][username]) {
-          bot.sendMessage(
-            chatId,
-            "Нельзя потратить больше чем имеешь. Введи корректную сумму."
-          );
-          return hadleSum(properties, bot);
-        }
-        dataBase[properties.name][username] -= sum;
+//     const chatId = msg.chat.id;
+//     const username = msg.from.username;
+
+//     // если сообщение пользователя - не цифра, выдаст сообщение об ошибке и снова запросит сумму
+//     // заказа
+//     if (isNaN(sum) || sum <= 0 || false) {
+//       bot.sendMessage(chatId, "Некорректная сумма. Введи число.");
+//       return hadleSum(properties, bot);
+//     }
+
+//     try {
+//       const dataBase = await getDataBase();
+
+//       if (properties.calculate) {
+//         const cashback = Math.round(sum * properties.cashbackPercent);
+//         dataBase[properties.name][username] += cashback;
+//       } else {
+//         if (sum > dataBase[properties.name][username]) {
+//           bot.sendMessage(
+//             chatId,
+//             "Нельзя потратить больше чем имеешь. Введи корректную сумму."
+//           );
+//           return hadleSum(properties, bot);
+//         }
+//         dataBase[properties.name][username] -= sum;
+//       }
+
+//       await setDataBase(dataBase);
+
+//       bot.sendMessage(
+//         chatId,
+//         `Твой кешбек составляет ${dataBase[properties.name][username]}`
+//       );
+//     } catch (error) {
+//       console.error("Ошибка обработки кешбека:", error);
+//       bot.sendMessage(chatId, "Произошла ошибка, попробуй еще раз.");
+//     }
+//   });
+// }
+
+// function askForSum(properties, bot, chatId, username) {
+//   if (properties.calculate) {
+//     bot
+//       .sendMessage(chatId, "Напиши сумму заказа")
+//       .then(() => hadleSum(properties, bot, chatId, username));
+//   } else {
+//     bot
+//       .sendMessage(chatId, "Напиши сумму потраченного кешбека")
+//       .then(() => hadleSum(properties, bot, chatId, username));
+//   }
+// };
+
+async function askForSum(properties, bot, chatId, username) {
+  bot.sendMessage(chatId, "Напиши сумму").then(() => {
+    bot.once("message", async (msg) => {
+      let sum = parseFloat(+msg.text);
+
+      if (isNaN(sum) || sum <= 0 || false) {
+        bot.sendMessage(chatId, "Некорректная сумма. Введи число.");
+        return askForSum(properties, bot, chatId, username); // Повторный вызов функции запроса суммы
       }
 
-      await setDataBase(dataBase);
+      try {
+        const dataBase = await getDataBase();
 
-      bot.sendMessage(
-        chatId,
-        `Твой кешбек составляет ${dataBase[properties.name][username]}`
-      );
-    } catch (error) {
-      console.error("Ошибка обработки кешбека:", error);
-      bot.sendMessage(chatId, "Произошла ошибка, попробуй еще раз.");
-    }
+        if (properties.calculate) {
+          const cashback = Math.round(sum * properties.cashbackPercent);
+          dataBase[properties.name][username] += cashback;
+        } else {
+          if (sum > dataBase[properties.name][username]) {
+            bot.sendMessage(
+              chatId,
+              `Нельзя потратить больше, чем имеешь \u{261D}\u{FE0F}\u{261D}\u{FE0F}\u{261D}\u{FE0F}`
+            );
+            return askForSum(properties, bot, chatId, username);
+          }
+          dataBase[properties.name][username] -= sum;
+        }
+
+        await setDataBase(dataBase);
+
+        bot.sendMessage(
+          chatId,
+          `Твой кешбек составляет ${dataBase[properties.name][username]}`
+        );
+      } catch (error) {
+        console.error("Ошибка обработки кешбэка:", error);
+        bot.sendMessage(chatId, "Произошла ошибка, попробуй еще раз.");
+      }
+    });
   });
-}
-
-function askForSum(properties, bot, chatId, username) {
-  if (properties.calculate) {
-    bot
-      .sendMessage(chatId, "Напиши сумму заказа")
-      .then(() => hadleSum(properties, bot, username));
-  } else {
-    bot
-      .sendMessage(chatId, "Напиши сумму потраченного кешбека")
-      .then(() => hadleSum(properties, bot, username));
-  }
 }
 
 async function showCashback(properties, bot, chatId, username) {
@@ -205,36 +275,45 @@ bot.on("message", async (msg) => {
   //   dataBase[username] = 0;
   // }
 
-  if (text === `/start` && username === `StasBakryu`) {
-    await bot.sendMessage(chatId, `Привет, кабанчик`);
-    return bot.sendMessage(chatId, `Какой кешбек показать?`, buttonDelievery);
+  const delivery = mapping[text];
+
+  if (delivery) {
+    return await delivery.handler(
+      delivery.properties,
+      bot,
+      chatId,
+      username,
+      text
+    );
   }
 
-  if (text === `/start`) {
-    await bot.sendMessage(chatId, `Привет, ${msg.from.first_name}`);
-    return bot.sendMessage(chatId, `Какой кешбек показать?`, buttonDelievery);
-  }
-
-  // в mapping подставляется текст из сообщения пользователя(тут: команда) и так получаются
-  // данные объектов из mapping, а значит - зависимость результатов от команды
-  // const delievery = mapping[(text)];
-
-  // если пользователь ввел не команду, функция закончит свое действие, если все правильно, будет
-  // вызвана функция через mapping.команда.properties.handler
-  // if (delievery) {
-  //   delievery.handler();
-  // };
-
-  const delievery = mapping[text];
-  if (delievery) {
-    delievery.handler(delievery.properties, bot, chatId, username);
-  }
-
-  // return bot.sendPhoto(
-  //   chatId,
-  //   `https://pbs.twimg.com/media/CTRxeF5UsAAE8hl.jpg`
-  // );
+  // if (msg.text === delivery || text === "Number") {
+  //   return await bot.sendSticker(
+  //     chatId,
+  //     `CAACAgIAAxkBAAEMhkdnrdoiIcwk7nG23xljRgmLc9gfkAACHWQAAqlOcUn4tx_ROTtmejYE`
+  //   );
+  // }
 });
+
+const helloMessages = {
+  vingriel: `Привет, повелительница`,
+  StasBakryu: `Привет, кабанчик`,
+};
+
+async function start(properties, bot, chatId, username) {
+  await bot.sendMessage(
+    chatId,
+    helloMessages[username] || `Привет, ${msg.from.first_name}`
+  );
+  if (username === "vingriel") {
+    return bot.sendMessage(
+      chatId,
+      "Какой кешбек показать?",
+      buttonDeliveryAdmin
+    );
+  }
+  return bot.sendMessage(chatId, `Какой кешбек показать?`, buttonDelivery);
+}
 
 function showVilkiMenu(properties, bot, chatId) {
   return bot.sendMessage(chatId, "Что ты хочешь сделать?", vilkiAction);
@@ -244,18 +323,22 @@ function showLazyMenu(properties, bot, chatId) {
   return bot.sendMessage(chatId, "Что ты хочешь сделать?", lazyAction);
 }
 
-// прослушивание кнопок
-bot.on("callback_query", (msg) => {
-  // msg.data - вытаскиваем название кнопки
-  const data = msg.data;
-  const username = msg.from.username;
-  const chatId = msg.message.chat.id;
+function returnMenu(properties, bot, chatId) {
+  return bot.sendMessage(chatId, "Какой кешбек показать?", buttonDelivery);
+}
 
-  const delievery = mapping[data];
-
-  delievery.handler(delievery.properties, bot, chatId, username);
-});
-
-bot.on("polling_error", (error) =>
-  console.log(`Polling error: ${error.message}`)
-);
+async function showUsersCashback(properties, bot, chatId, username) {
+  const dataBase = await getDataBase();
+  const result = Object.entries(dataBase).reduce(
+    (accumulator, [companyName, users]) => {
+      const usersList = JSON.stringify(users)
+        .split(/[,{()}]/)
+        .join("\n")
+        .split(":")
+        .join(" : ");
+      return accumulator + companyName + ":" + usersList + "\n";
+    },
+    ""
+  );
+  return bot.sendMessage(chatId, result);
+}
